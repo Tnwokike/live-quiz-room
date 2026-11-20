@@ -11,6 +11,7 @@ import type { Context, Hono } from 'hono'
 import { authenticatedRoomRequest, resolveAppRole, verifyJwt } from 'deepspace/worker'
 import type { JwtVerifierConfig, VerifyResult } from 'deepspace/worker'
 import type { AppContext, Env } from '../../worker.js'
+import { hostJobRoomId } from '../lib/quiz.js'
 
 function jwtConfig(env: Env): JwtVerifierConfig {
   return { publicKey: env.AUTH_JWT_PUBLIC_KEY, issuer: env.AUTH_JWT_ISSUER }
@@ -165,8 +166,18 @@ export function registerRealtimeRoutes(app: Hono<AppContext>): void {
     ),
   )
 
-  app.get(
-    '/ws/jobs/:roomId',
-    wsRoute((env) => env.JOB_ROOMS),
-  )
+  // Each host gets a private job queue, `jobs:<userId>`. JobRoom's own
+  // authorizeRead/Write only see the caller's role, not which room they are
+  // in, so the room-to-user binding is enforced here: without it any member
+  // could watch, cancel, or retry another host's generation jobs.
+  app.get('/ws/jobs/:roomId', async (c) => {
+    const token = new URL(c.req.url).searchParams.get('token')
+    const auth = token ? (await verifyJwt(jwtConfig(c.env), token)).result : null
+    if (!auth) return new Response('Unauthorized', { status: 401 })
+    if (c.req.param('roomId') !== hostJobRoomId(auth.userId)) {
+      return new Response('Forbidden', { status: 403 })
+    }
+    const stub = c.env.JOB_ROOMS.get(c.env.JOB_ROOMS.idFromName(hostJobRoomId(auth.userId)))
+    return stub.fetch(authenticatedRoomRequest(c.req.raw, auth))
+  })
 }

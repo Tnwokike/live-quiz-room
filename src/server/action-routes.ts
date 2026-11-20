@@ -69,7 +69,12 @@ export function registerActionRoutes(app: Hono<AppContext>, resolveAuth: Resolve
   })
 }
 
-function createActionTools(env: Env, userId: string, callerJwt: string): ActionTools {
+/**
+ * Exported so background jobs (src/jobs.ts) reach records through the same
+ * RBAC-off tools as actions. Same trust rule applies: pass only a user id the
+ * worker has verified (for jobs, `job.enqueuedBy`), never one from a payload.
+ */
+export function createActionTools(env: Env, userId: string, callerJwt: string): ActionTools {
   const stub = env.RECORD_ROOMS.get(env.RECORD_ROOMS.idFromName(`app:${env.DEEPSPACE_APP_ID}`))
 
   // The DO returns ActionResult<unknown>; callers below supply the precise

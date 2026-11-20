@@ -15,4 +15,16 @@ test.describe('API tests', () => {
     await page.waitForSelector('[data-testid="app-navigation"]', { timeout: 15000 })
     // If the app loaded and connected, the WS endpoint works
   })
+
+  test('createQuiz refuses unauthenticated callers', async ({ request }) => {
+    const res = await request.post('/api/actions/createQuiz', {
+      data: { title: 'x', sourceKey: 'k', questionCount: 5 },
+    })
+    expect(res.status()).toBe(401)
+  })
+
+  test('job queue socket refuses unauthenticated callers', async ({ request }) => {
+    const res = await request.get('/ws/jobs/jobs:someone-else')
+    expect(res.status()).toBe(401)
+  })
 })
