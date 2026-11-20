@@ -100,6 +100,9 @@ export const gamesSchema: CollectionSchema = {
     /** -1 until the host reveals the current question. */
     { name: 'revealedIndex', storage: 'number', interpretation: 'plain' },
     { name: 'answeredCount', storage: 'number', interpretation: 'plain' },
+    { name: 'questionDurationMs', storage: 'number', interpretation: 'plain' },
+    /** number[] — per-option answer counts, written at reveal (aggregates only, no who-picked-what). */
+    { name: 'answerCounts', storage: 'text', interpretation: { kind: 'json' } },
     /** string[] of joined player ids — drives the `shared` read rule. */
     { name: 'playerIds', storage: 'text', interpretation: { kind: 'json' } },
   ],

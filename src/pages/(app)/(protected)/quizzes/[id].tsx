@@ -9,7 +9,8 @@ import { useState } from 'react'
 import { useAuth, useJobs, useMutations, useQuery } from 'deepspace'
 import { Badge, Button, Input, Textarea, cn, useToast } from '@/components/ui'
 import { JobProgress } from '@/components/quiz/JobProgress'
-import { Link, useParams } from '@/router'
+import { Link, useNavigate, useParams } from '@/router'
+import { callAction } from '@/lib/call-action'
 import { hostJobRoomId, type Question, type Quiz } from '@/lib/quiz'
 
 export default function QuizPage() {
@@ -43,7 +44,7 @@ export default function QuizPage() {
             <p className="text-sm text-muted-foreground">From {quiz.data.sourceName}</p>
           </div>
           {quiz.data.status === 'ready' && (
-            <Button disabled title="Live hosting arrives in the next step">Host live game</Button>
+            <HostButton quizId={id} />
           )}
         </div>
       </header>
@@ -162,6 +163,23 @@ function QuestionCard({ recordId, index, question }: { recordId: string; index: 
       {question.explanation && <p className="text-xs text-muted-foreground">{question.explanation}</p>}
     </li>
   )
+}
+
+function HostButton({ quizId }: { quizId: string }) {
+  const navigate = useNavigate()
+  const toast = useToast()
+  const [busy, setBusy] = useState(false)
+  async function host() {
+    setBusy(true)
+    try {
+      const { gameId } = await callAction<{ gameId: string }>('startGame', { quizId })
+      navigate('/host/:gameId', { params: { gameId } })
+    } catch (err) {
+      toast.error('Could not start a game', err instanceof Error ? err.message : undefined)
+      setBusy(false)
+    }
+  }
+  return <Button onClick={host} loading={busy}>Host live game</Button>
 }
 
 function Centered({ children }: { children: React.ReactNode }) {

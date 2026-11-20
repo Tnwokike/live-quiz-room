@@ -7,6 +7,7 @@ import { enqueueJob } from 'deepspace/worker'
 import type { ActionHandler } from 'deepspace/worker'
 import type { Env } from '../../worker'
 import { hostJobRoomId, QUESTION_COUNTS, type GenerateQuizPayload, type Quiz } from '../lib/quiz'
+import { endGame, joinGame, nextQuestion, revealQuestion, serverTime, startGame, submitAnswer } from './game'
 
 const str = (v: unknown) => (typeof v === 'string' ? v.trim() : '')
 
@@ -58,4 +59,11 @@ const createQuiz: ActionHandler<Env> = async ({ userId, params, tools, env }) =>
 
 export const actions: Record<string, ActionHandler<Env>> = {
   createQuiz,
+  startGame,
+  joinGame,
+  nextQuestion,
+  submitAnswer,
+  revealQuestion,
+  endGame,
+  serverTime,
 }
