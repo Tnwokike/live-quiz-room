@@ -38,10 +38,23 @@ async function getRow<T>(tools: ActionTools, coll: string, id: string): Promise<
   return { recordId: rec.recordId ?? id, data: rec.data }
 }
 
-async function queryRows<T>(tools: ActionTools, coll: string, where: Record<string, string | number>, limit = 500) {
-  const r = await tools.query(coll, { where, limit })
-  if (!r.success) throw new Error(r.error)
-  return r.data.records as unknown as Row<T>[]
+/**
+ * Query every matching row, following `nextOffset`. A single records.query
+ * page is capped (~30KB, then truncated with a `nextOffset`), so reading only
+ * the first page would silently drop answers in a big game and corrupt scores.
+ * `max` bounds the total for lookups that only need one row.
+ */
+async function queryRows<T>(tools: ActionTools, coll: string, where: Record<string, string | number>, max = 10_000) {
+  const rows: Row<T>[] = []
+  let offset: number | undefined = 0
+  while (offset !== undefined && rows.length < max) {
+    const r = await tools.query(coll, { where, limit: Math.min(200, max - rows.length), offset } as Parameters<ActionTools['query']>[1])
+    if (!r.success) throw new Error(r.error)
+    const page = r.data as { records: unknown[]; nextOffset?: number }
+    rows.push(...(page.records as Row<T>[]))
+    offset = page.nextOffset
+  }
+  return rows
 }
 
 /** Load a game the caller hosts, or explain why not. */
@@ -176,13 +189,24 @@ export const submitAnswer: ActionHandler<Env> = async ({ userId, params, tools }
   return { success: true, data: { accepted: true } }
 }
 
-/** Host closes the question: score answers, publish the correct option and counts. */
+/**
+ * Close the question: score answers, publish the correct option and counts.
+ *
+ * The host can reveal any time. A joined player can too, but only once the
+ * deadline (plus grace) has passed on the server clock, so a host whose tab
+ * stalled or closed can't leave everyone stuck at 0 seconds. Revealing early
+ * stays host-only. Safe to call more than once (see scoring note at top).
+ */
 export const revealQuestion: ActionHandler<Env> = async ({ userId, params, tools }) => {
-  const r = await hostedGame(tools, String(params.gameId ?? ''), userId)
-  if ('error' in r) return fail(r.error!)
-  const { game } = r
+  const game = await getRow<Game>(tools, 'games', String(params.gameId ?? ''))
+  if (!game) return fail('Game not found.')
   if (game.data.phase === 'reveal') return { success: true, data: { alreadyRevealed: true } }
   if (game.data.phase !== 'question') return fail('No question is live.')
+  if (game.data.hostId !== userId) {
+    const joined = await queryRows<Player>(tools, 'players', { gameId: game.recordId, userId }, 1)
+    if (joined.length === 0) return fail('Only the host can do that.')
+    if (isWithinDeadline(game.data, Date.now())) return fail('Only the host can reveal early.')
+  }
 
   const index = game.data.currentIndex
   const [question] = await queryRows<Question>(tools, 'questions', { quizId: game.data.quizId, position: index }, 1)
@@ -203,7 +227,7 @@ export const revealQuestion: ActionHandler<Env> = async ({ userId, params, tools
   }
 
   // Score = sum of all this player's answer points in the game (idempotent).
-  const allAnswers = await queryRows<Answer>(tools, 'answers', { gameId: game.recordId }, 5000)
+  const allAnswers = await queryRows<Answer>(tools, 'answers', { gameId: game.recordId })
   const totals = new Map<string, number>()
   for (const a of allAnswers) totals.set(a.data.userId, (totals.get(a.data.userId) ?? 0) + (a.data.points ?? 0))
   const players = await queryRows<Player>(tools, 'players', { gameId: game.recordId })

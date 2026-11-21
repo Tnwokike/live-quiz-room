@@ -102,8 +102,8 @@ test('host runs a full game; player never receives the answer key', async ({ use
   // --- Results agree on both screens ---
   await expect(bob.page.getByRole('heading', { name: 'Game over' })).toBeVisible({ timeout: 15_000 })
   await expect(alice.page.getByRole('heading', { name: 'Final results' })).toBeVisible()
-  const bobScore = await bob.page.locator('p:has-text("You finished") .font-mono').textContent()
-  await expect(alice.page.locator('ol li', { hasText: 'Bob' }).locator('.font-mono').last()).toHaveText(bobScore!)
+  const bobScore = await bob.page.getByTestId('final-score').textContent()
+  await expect(alice.page.locator('ol li', { hasText: 'Bob' }).locator('span').last()).toHaveText(bobScore!)
 
   // --- The answer key never reached Bob ---
   // The schema-description frame names the `correctIndex` column (schemas
@@ -115,4 +115,41 @@ test('host runs a full game; player never receives the answer key', async ({ use
   expect(leaked, 'answer key appeared in a frame sent to a player').toHaveLength(0)
   // Sanity: Bob did receive live game data, so the check above isn't vacuous.
   expect(dataFrames.some((f) => f.includes('"collection":"games"') && f.includes('currentQuestion'))).toBe(true)
+})
+
+test('if the host disappears, the question still reveals after the deadline', async ({ users }) => {
+  test.setTimeout(240_000)
+  const [alice, bob] = await users(['Alice', 'Bob'])
+  let bobToken = ''
+  bob.page.on('websocket', (ws) => {
+    const t = new URL(ws.url()).searchParams.get('token')
+    if (t) bobToken = t
+  })
+
+  await alice.page.goto('/quizzes')
+  await alice.page.getByLabel('Quiz title').fill('Host leaves')
+  await alice.page.getByRole('button', { name: 'Paste text' }).click()
+  await alice.page.getByPlaceholder('Paste your notes here…').fill(NOTES)
+  await alice.page.getByRole('radio', { name: '5' }).click()
+  await alice.page.getByRole('button', { name: 'Generate quiz' }).click()
+  await expect(alice.page.getByRole('heading', { name: '5 questions' })).toBeVisible({ timeout: 150_000 })
+  await alice.page.getByRole('button', { name: 'Host live game' }).click()
+  const code = (await alice.page.getByTestId('join-code').textContent())!.trim()
+  const gameId = alice.page.url().split('/host/')[1]
+
+  await bob.page.goto(`/play/${code}`)
+  await expect(bob.page.getByRole('heading', { name: /You're in/ })).toBeVisible({ timeout: 15_000 })
+  await expect(alice.page.getByText('1 joined')).toBeVisible({ timeout: 10_000 })
+  await alice.page.getByRole('button', { name: 'Start game' }).click()
+  await expect(bob.page.getByText('Question 1 of 5')).toBeVisible({ timeout: 15_000 })
+
+  // Host's screen goes away mid-question; Bob doesn't answer.
+  await alice.page.close()
+
+  // A player can't reveal early...
+  const early = await action(bob.page, bobToken, 'revealQuestion', { gameId })
+  expect(early).toMatchObject({ success: false, error: 'Only the host can reveal early.' })
+
+  // ...but once time is up, Bob's client triggers the reveal and the game moves on.
+  await expect(bob.page.getByText('No answer this time.')).toBeVisible({ timeout: 40_000 })
 })

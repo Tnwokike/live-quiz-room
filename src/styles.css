@@ -51,6 +51,21 @@
   --radius-xl: calc(var(--radius) + 4px);
   --radius-2xl: calc(var(--radius) + 8px);
 
+  /*
+   * Answer tiles — four distinct, colorblind-friendlier hues, each paired
+   * with a shape glyph in the UI so color is never the only cue. White text
+   * on each is >= 4.5:1. Themes may override.
+   */
+  --color-option-1: #c2362b;
+  --color-option-2: #0f766e;
+  --color-option-3: #9a5b07;
+  --color-option-4: #2257c4;
+  --color-option-foreground: #ffffff;
+
+  /* Type: Space Grotesk for headings/numbers, Inter for body (index.html loads both). */
+  --font-display: 'Space Grotesk', 'Inter', ui-sans-serif, sans-serif;
+  --font-sans: 'Inter', ui-sans-serif, -apple-system, 'Segoe UI', sans-serif;
+
   /* Status colors — constant across all themes */
   --color-success: #10b981;
   --color-success-foreground: #ffffff;
@@ -164,12 +179,18 @@
   }
 
   body {
-    font-family: 'SF Pro Text', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    font-family: var(--font-sans);
     line-height: 1.5;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
     font-size: 14px;
     color: var(--color-foreground);
+  }
+
+  /* Headings and scores get the display face; body stays Inter. */
+  h1, h2, h3, .font-display {
+    font-family: var(--font-display);
+    letter-spacing: -0.01em;
   }
 
   /* Scrollbar styling */
@@ -231,4 +252,25 @@
   a, button, [role="button"], input, select, textarea {
     touch-action: manipulation;
   }
+}
+
+/*
+ * Landing hero loop (src/pages/index.tsx). 7s: the timer drains, the third
+ * tile locks in, the others dim, points tick up. CSS-only so the prerendered
+ * page animates without JS; frozen on its final frame under reduced motion.
+ */
+@keyframes lqr-timer { 0% { width: 100%; } 60%, 100% { width: 38%; } }
+@keyframes lqr-lock {
+  0%, 45% { box-shadow: none; transform: none; }
+  52% { transform: scale(1.06); }
+  58%, 100% { box-shadow: 0 0 0 3px var(--color-background), 0 0 0 6px var(--color-foreground); transform: none; }
+}
+@keyframes lqr-dim { 0%, 50% { opacity: 1; } 58%, 100% { opacity: 0.35; } }
+@keyframes lqr-points { 0%, 62% { opacity: 0; transform: translateY(4px); } 70%, 100% { opacity: 1; transform: none; } }
+.lqr-timer { animation: lqr-timer 7s ease-in-out infinite; }
+.lqr-lock { animation: lqr-lock 7s ease-out infinite; }
+.lqr-dim { animation: lqr-dim 7s ease-out infinite; }
+.lqr-points { display: inline-block; animation: lqr-points 7s ease-out infinite; }
+@media (prefers-reduced-motion: reduce) {
+  .lqr-timer, .lqr-lock, .lqr-dim, .lqr-points { animation-duration: 1ms; animation-iteration-count: 1; animation-fill-mode: forwards; }
 }

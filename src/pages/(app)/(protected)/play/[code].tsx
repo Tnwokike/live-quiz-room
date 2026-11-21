@@ -13,7 +13,7 @@ import { useToast } from '@/components/ui'
 import { Countdown, Leaderboard, OptionGrid } from '@/components/game/parts'
 import { useClockOffset, useCountdown, useGame, usePlayers } from '@/components/game/hooks'
 import { callAction } from '@/lib/call-action'
-import { normalizeJoinCode, QUESTION_DURATION_MS, type Answer } from '@/lib/game'
+import { ANSWER_GRACE_MS, normalizeJoinCode, QUESTION_DURATION_MS, type Answer } from '@/lib/game'
 import { Link, useNavigate, useParams } from '@/router'
 
 type JoinResult = { gameId: string; role: 'host' | 'player' }
@@ -79,6 +79,19 @@ function PlayGame({ gameId, code, onMissing }: { gameId: string; code: string; o
   const me = players.find((p) => p.userId === userId)
   const rank = me ? players.findIndex((p) => p.userId === userId) + 1 : 0
 
+  // Fallback if the host's screen stalls: once time is up (plus the server's
+  // grace window and some jitter so players don't all fire at once), ask the
+  // server to reveal. It refuses unless the deadline really has passed, and
+  // the normal case never gets here because the host reveals first.
+  const timeUp = live && seconds === 0
+  useEffect(() => {
+    if (!timeUp) return
+    const t = setTimeout(() => {
+      callAction('revealQuestion', { gameId }).catch(() => {})
+    }, ANSWER_GRACE_MS + 2500 + Math.random() * 1500)
+    return () => clearTimeout(t)
+  }, [timeUp, gameId, g?.currentIndex])
+
   const answer = useCallback(
     async (choice: number) => {
       if (!g || myChoice != null) return
@@ -110,7 +123,7 @@ function PlayGame({ gameId, code, onMissing }: { gameId: string; code: string; o
     return (
       <Screen wide>
         <h1 className="text-3xl font-semibold">Game over</h1>
-        {me && <p className="text-lg">You finished <strong>#{rank}</strong> with <span className="font-mono">{me.score}</span> points.</p>}
+        {me && <p className="text-lg">You finished <strong>#{rank}</strong> with <span className="font-display font-semibold" data-testid="final-score">{me.score}</span> points.</p>}
         <Leaderboard players={players} highlight={userId} limit={100} />
       </Screen>
     )

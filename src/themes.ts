@@ -18,6 +18,11 @@
 
 export const THEMES = [
   {
+    id: 'notebook',
+    label: 'Notebook',
+    description: 'Warm paper, ink text, tomato accent. The Live Quiz Room theme.',
+  },
+  {
     id: 'slate',
     label: 'Slate',
     description: 'Neutral dark placeholder default. Replace with your own theme.',

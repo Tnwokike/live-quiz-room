@@ -8,7 +8,7 @@
 
 import { useCallback, useState } from 'react'
 import { usePresenceRoom } from 'deepspace'
-import { Button, useToast } from '@/components/ui'
+import { Button, ConfirmModal, useToast } from '@/components/ui'
 import { Countdown, Leaderboard, OptionGrid } from '@/components/game/parts'
 import { useClockOffset, useCountdown, useGame, useOnce, usePlayers } from '@/components/game/hooks'
 import { callAction } from '@/lib/call-action'
@@ -24,6 +24,7 @@ export default function HostPage() {
   const offset = useClockOffset()
   const toast = useToast()
   const [busy, setBusy] = useState(false)
+  const [confirmEnd, setConfirmEnd] = useState(false)
 
   const g = game?.data
   const live = g?.phase === 'question'
@@ -63,9 +64,13 @@ export default function HostPage() {
             </p>
           )}
         </div>
-        <div className="flex items-center gap-3 rounded-xl border border-border px-4 py-2">
-          <span className="text-xs text-muted-foreground">Join at /join with code</span>
-          <span className="font-mono text-2xl font-semibold tracking-[0.2em]" data-testid="join-code">{g.joinCode}</span>
+        <div className="flex items-center gap-4 rounded-xl border border-border bg-card px-4 py-2">
+          <span className="text-xs leading-tight text-muted-foreground">
+            Join at
+            <br />
+            <span className="font-medium text-foreground">{window.location.host}/join</span>
+          </span>
+          <span className="font-display text-3xl font-bold tracking-[0.15em]" data-testid="join-code">{g.joinCode}</span>
         </div>
       </header>
 
@@ -128,7 +133,19 @@ export default function HostPage() {
 
       {g.phase !== 'finished' && (
         <footer className="pt-4">
-          <Button variant="ghost" size="sm" onClick={() => run('endGame')} disabled={busy}>End game</Button>
+          <Button variant="ghost" size="sm" onClick={() => setConfirmEnd(true)} disabled={busy}>End game</Button>
+          <ConfirmModal
+            open={confirmEnd}
+            onClose={() => setConfirmEnd(false)}
+            onConfirm={() => {
+              setConfirmEnd(false)
+              void run('endGame')
+            }}
+            title="End this game?"
+            description="Everyone jumps to the final results. You can't resume it."
+            confirmText="End game"
+            variant="destructive"
+          />
         </footer>
       )}
     </Shell>

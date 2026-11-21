@@ -81,7 +81,7 @@ function NewQuizForm() {
   const [busy, setBusy] = useState(false)
 
   const source: Blob | null = mode === 'file' ? file : pasted.trim() ? new Blob([pasted], { type: 'text/plain' }) : null
-  const sourceName = mode === 'file' ? file?.name ?? '' : 'Pasted notes'
+  const sourceName = mode === 'file' ? file?.name ?? '' : 'pasted notes'
   const tooBig = !!source && source.size > MAX_SOURCE_BYTES
   const canSubmit = !!title.trim() && !!source && !tooBig && !busy
 

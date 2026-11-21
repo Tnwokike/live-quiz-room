@@ -52,6 +52,11 @@ async function generateQuiz(job: Job<GenerateQuizPayload>, ctx: JobContext, env:
     await tools.update('quizzes', quizId, { status: 'failed', error: message })
     throw new Error(message)
   }
+  // Host canceled: don't leave the quiz badge stuck on "Generating". Retry
+  // flips it back to generating at the top of the next run.
+  const markCanceled = async () => {
+    await tools.update('quizzes', quizId, { status: 'failed', error: 'Canceled.' })
+  }
 
   try {
     await tools.update('quizzes', quizId, { status: 'generating', error: '' })
@@ -76,7 +81,7 @@ async function generateQuiz(job: Job<GenerateQuizPayload>, ctx: JobContext, env:
       maxOutputTokens: 4000,
       abortSignal: signal,
     })
-    if (ctx.signal.aborted) return
+    if (ctx.signal.aborted) return markCanceled()
 
     // Output.object already validated against the schema; re-parse so a
     // provider quirk can never write malformed rows.
@@ -96,7 +101,7 @@ async function generateQuiz(job: Job<GenerateQuizPayload>, ctx: JobContext, env:
     ctx.progress(1, 'Done')
     return { quizId, questionCount: questions.length }
   } catch (err) {
-    if (ctx.signal.aborted) return
+    if (ctx.signal.aborted) return markCanceled()
     const message = err instanceof Error ? err.message : 'Generation failed.'
     // `fail` already recorded its own message; record anything else.
     await tools.update('quizzes', quizId, { status: 'failed', error: message.slice(0, 500) })

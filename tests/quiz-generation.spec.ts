@@ -70,3 +70,20 @@ test('host generates a quiz; another user cannot read it', async ({ users }) => 
   const own = await bob.page.request.get(`/ws/jobs/${encodeURIComponent(bobRoom)}?token=${bobUrl.searchParams.get('token')}`)
   expect(own.status()).not.toBe(403)
 })
+
+test('a failed generation explains why and offers retry', async ({ users }) => {
+  const [alice] = await users(['Alice'])
+  await alice.page.goto('/quizzes')
+  await alice.page.getByLabel('Quiz title').fill('Too short')
+  await alice.page.getByRole('button', { name: 'Paste text' }).click()
+  // Under the 200-character minimum: the job fails before any AI call.
+  await alice.page.getByPlaceholder('Paste your notes here…').fill('Mitochondria make ATP.')
+  await alice.page.getByRole('button', { name: 'Generate quiz' }).click()
+
+  await expect(alice.page.getByText('Notes are too short to make a quiz from.')).toBeVisible({ timeout: 30_000 })
+  await expect(alice.page.getByRole('button', { name: 'Retry' })).toBeVisible()
+
+  // The list reflects it too.
+  await alice.page.getByRole('link', { name: '← Your quizzes' }).click()
+  await expect(alice.page.locator('li', { hasText: 'Too short' }).getByText('Failed')).toBeVisible()
+})
