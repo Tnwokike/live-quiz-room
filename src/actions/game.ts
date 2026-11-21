@@ -72,10 +72,30 @@ async function syncPlayerIds(tools: ActionTools, gameId: string): Promise<string
   return ids
 }
 
-async function displayName(tools: ActionTools, userId: string, fallback: string): Promise<string> {
-  // Use the server-side profile name rather than trusting a client-sent one.
+/** `name` claim from a JWT the action route has ALREADY verified (never call on an unverified token). */
+function verifiedTokenName(callerJwt: string): string {
+  try {
+    const part = callerJwt.split('.')[1] ?? ''
+    const json = atob(part.replace(/-/g, '+').replace(/_/g, '/'))
+    const name = (JSON.parse(json) as { name?: unknown }).name
+    return typeof name === 'string' ? name.trim() : ''
+  } catch {
+    return ''
+  }
+}
+
+/**
+ * Player display name, from server-trusted sources only (a client-sent name
+ * would let anyone impersonate anyone on the leaderboard): the verified
+ * token's `name` claim, then the app's `users` row. In production the
+ * `users` row may not exist yet when someone joins, which is how players
+ * first showed up as "Player" on the live site.
+ */
+async function displayName(tools: ActionTools, userId: string, callerJwt: string): Promise<string> {
+  const fromToken = verifiedTokenName(callerJwt)
+  if (fromToken) return fromToken.slice(0, 60)
   const user = await getRow<{ name?: string }>(tools, 'users', userId)
-  return (user?.data.name || fallback || 'Player').slice(0, 60)
+  return (user?.data.name || 'Player').slice(0, 60)
 }
 
 /** Host opens a lobby for one of their ready quizzes. */
@@ -111,7 +131,7 @@ export const startGame: ActionHandler<Env> = async ({ userId, params, tools }) =
 }
 
 /** Player enters a code. Idempotent: rejoining returns the same game. */
-export const joinGame: ActionHandler<Env> = async ({ userId, params, tools }) => {
+export const joinGame: ActionHandler<Env> = async ({ userId, params, tools, callerJwt }) => {
   const code = normalizeJoinCode(String(params.code ?? ''))
   if (!code) return fail('Enter a game code.')
   const [game] = await queryRows<Game>(tools, 'games', { joinCode: code }, 1)
@@ -125,7 +145,7 @@ export const joinGame: ActionHandler<Env> = async ({ userId, params, tools }) =>
     const player: Player = {
       gameId: game.recordId,
       userId,
-      name: await displayName(tools, userId, String(params.name ?? '')),
+      name: await displayName(tools, userId, callerJwt),
       score: 0,
       lastPoints: 0,
     }
